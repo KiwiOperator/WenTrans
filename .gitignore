@@ -1,0 +1,141 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+.env/
+.venv/
+env/
+ENV/
+
+# Pip / Poetry / Conda
+pip-log.txt
+pip-delete-this-directory.txt
+poetry.lock
+Pipfile.lock
+conda-meta/
+
+# Unit test / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+
+# Type checkers / linters
+.mypy_cache/
+.pytype/
+.pyre/
+ruff_cache/
+
+# =========================
+# NLP / ML specific
+# =========================
+
+# Model files
+*.h5
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.onnx
+
+# Tokenizers / embeddings / datasets
+*.vec
+*.kv
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.joblib
+
+# Hugging Face cache
+.cache/huggingface/
+transformers_cache/
+hf_cache/
+
+# SpaCy models
+*.spacy
+
+# Data (customize as needed)
+data/
+datasets/
+corpus/
+
+# Checkpoints & logs
+checkpoints/
+runs/
+wandb/
+mlruns/
+
+# =========================
+# Jupyter Notebooks
+# =========================
+.ipynb_checkpoints
+
+# =========================
+# macOS (OS X)
+# =========================
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Icon must end with two \r
+Icon
+
+# Thumbnails
+._*
+
+# Files that might appear in root
+.Spotlight-V100
+.Trashes
+
+# =========================
+# IDEs / Editors
+# =========================
+
+# VS Code
+.vscode/
+
+# PyCharm / IntelliJ
+.idea/
+
+# Sublime
+*.sublime-project
+*.sublime-workspace
+
+# =========================
+# Misc
+# =========================
+*.swp
+*.swo
+*~
