@@ -93,6 +93,7 @@ hf_cache/
 # Data (customize as needed)
 data/
 datasets/
+dataset/
 corpus/
 
 # Checkpoints & logs
