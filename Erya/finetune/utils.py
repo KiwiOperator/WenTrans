@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import random
+import sys
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -14,14 +15,38 @@ import torch.nn as nn
 
 
 def get_logger(name: str = "erya_finetune", level: int = logging.INFO) -> logging.Logger:
+    """Stdout logger so SLURM sends logs to %j.out (not %j.err).
+
+    A line-buffered StreamHandler also lets ``tail -f`` see records in
+    real time on PACE.
+    """
     logger = logging.getLogger(name)
     if not logger.handlers:
-        handler = logging.StreamHandler()
-        fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+        handler = logging.StreamHandler(stream=sys.stdout)
+        fmt = logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%H:%M:%S",
+        )
         handler.setFormatter(fmt)
         logger.addHandler(handler)
+        logger.propagate = False
     logger.setLevel(level)
+    try:  # ensure stdout is line-buffered so SLURM sees logs as they happen
+        sys.stdout.reconfigure(line_buffering=True)
+    except Exception:
+        pass
     return logger
+
+
+def format_eta(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h:d}h{m:02d}m{s:02d}s"
+    if m:
+        return f"{m:d}m{s:02d}s"
+    return f"{s:d}s"
 
 
 def set_seed(seed: int) -> None:

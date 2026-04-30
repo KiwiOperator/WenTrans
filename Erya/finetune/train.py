@@ -278,10 +278,12 @@ class _BatchifyMixed:
 
 
 @torch.no_grad()
-def eval_loss(tagged: TaggedErya, loader, device) -> float:
+def eval_loss(tagged: TaggedErya, loader, device, log=None, label: str = "valid") -> float:
     tagged.eval()
     total = 0.0
     n = 0
+    n_batches = len(loader) if hasattr(loader, "__len__") else None
+    last_print = time.time()
     for batch in loader:
         out = tagged(
             input_ids=batch.input_ids.to(device),
@@ -292,6 +294,11 @@ def eval_loss(tagged: TaggedErya, loader, device) -> float:
         )
         total += float(out.loss.item())
         n += 1
+        if log is not None and time.time() - last_print > 15:
+            running = total / n
+            tag = f"{n}/{n_batches}" if n_batches else f"{n}"
+            log.info("[%s] %s batches | running CE = %.4f", label, tag, running)
+            last_print = time.time()
     tagged.train()
     return total / max(1, n)
 
@@ -395,6 +402,12 @@ def main():
 
     autocast_dtype = torch.bfloat16 if (cfg.bf16 and torch.cuda.is_available()) else torch.float32
 
+    log.info(
+        "starting stage %d: %d optimizer steps (batch=%d, grad_accum=%d) -> ~%d examples seen",
+        cfg.stage, cfg.num_steps, cfg.batch_size, cfg.grad_accum,
+        cfg.num_steps * cfg.batch_size * cfg.grad_accum,
+    )
+
     # ---- training loop
     tagged.train()
     if kl_head is not None:
@@ -404,6 +417,11 @@ def main():
     micro = 0
     best_valid = float("inf")
     start = time.time()
+    last_log_time = start
+    last_log_step = 0
+    ema_ce = None
+    ema_kl = None
+    HEARTBEAT_SECONDS = 30
     train_iter = iter(train_loader)
 
     while step < cfg.num_steps:
@@ -466,22 +484,42 @@ def main():
         optimizer.zero_grad(set_to_none=True)
         step += 1
 
-        if step % cfg.log_every == 0:
-            elapsed = time.time() - start
+        ce_now = float(ce_loss.detach().item())
+        kl_now = float(kl_loss_val.detach().item())
+        ema_ce = ce_now if ema_ce is None else 0.98 * ema_ce + 0.02 * ce_now
+        ema_kl = kl_now if ema_kl is None else 0.98 * ema_kl + 0.02 * kl_now
+
+        now = time.time()
+        time_since_log = now - last_log_time
+        due_by_step = (step % cfg.log_every == 0)
+        due_by_time = time_since_log >= HEARTBEAT_SECONDS
+        if due_by_step or due_by_time:
+            elapsed = now - start
+            steps_since = max(1, step - last_log_step)
+            sec_per_step = time_since_log / steps_since
+            remaining = cfg.num_steps - step
+            eta = utils.format_eta(remaining * sec_per_step)
+            elapsed_str = utils.format_eta(elapsed)
+            pct = 100.0 * step / cfg.num_steps
+            current_lr = optimizer.param_groups[0]["lr"]
             log.info(
-                "step %d/%d | ce=%.4f kl=%.4f total=%.4f | alpha_seg=%.3f alpha_pos=%.3f | %.1fs",
-                step, cfg.num_steps,
-                float(ce_loss.detach().item()),
-                float(kl_loss_val.detach().item()),
-                float((ce_loss.detach() + cfg.kl_weight * kl_loss_val.detach()).item()),
+                "step %d/%d (%5.1f%%) | ce=%.4f (ema %.4f) kl=%.4f (ema %.4f) | "
+                "lr=%.2e alpha_s=%+.3f alpha_p=%+.3f | %.2fs/step | %s elapsed | ETA %s",
+                step, cfg.num_steps, pct,
+                ce_now, ema_ce, kl_now, ema_kl,
+                current_lr,
                 float(tagged.alpha_seg.detach().item()),
                 float(tagged.alpha_pos.detach().item()),
-                elapsed,
+                sec_per_step, elapsed_str, eta,
             )
+            last_log_time = now
+            last_log_step = step
 
         if step % cfg.valid_every == 0:
-            v = eval_loss(tagged, valid_loader, device)
-            log.info("step %d valid CE = %.4f", step, v)
+            log.info("running validation at step %d ...", step)
+            v = eval_loss(tagged, valid_loader, device, log=log, label="valid")
+            log.info("step %d valid CE = %.4f (best so far %.4f)",
+                     step, v, min(best_valid, v))
             meta = {
                 "stage": cfg.stage,
                 "step": step,
