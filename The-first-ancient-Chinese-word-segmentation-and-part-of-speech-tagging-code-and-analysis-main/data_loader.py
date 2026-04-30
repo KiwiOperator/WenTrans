@@ -43,17 +43,15 @@ class AnChinaDataset(Dataset):
         segpos_labels = []
         gram_list = []
         for line in origin_sentences:
-            words = []
+            token_ids = []
             for token in line:
                 if token == '“' or token == '”':
                     token = '"'
                 if token == '‘' or token == '’':
                     token = "'"
-                words.append(self.tokenizer.tokenize(token))
-            words = [item for token in words for item in token]
-            # print(line)
-            # print(words)
-            sentences.append((self.tokenizer.convert_tokens_to_ids(words), line))
+                # Keep a strict 1:1 mapping between input characters and labels.
+                token_ids.append(self.tokenizer.convert_tokens_to_ids(token))
+            sentences.append((token_ids, line))
             
         for tag in origin_labels:
             label_id = [self.label_seg2id.get(t) for t in tag]
