@@ -8,6 +8,7 @@ from test_file import generate_file
 from metrics import f1_score_seg,f1_score_pos
 def evaluate(dev_loader, model, mode='eval'):
     model.eval()
+    model_ref = model.module if hasattr(model, 'module') else model
     id_seg2label = label.id_seg2label
     id_pos2label = label.id_pos2label
     id_segpos2label = label.id_segpos2label
@@ -46,15 +47,18 @@ def evaluate(dev_loader, model, mode='eval'):
             batch_segoutput, batch_posoutput = batch_output
             dev_losses += float(loss.item())
 
-            labelseg_masks = batch_seglabels.gt(-1).to('cpu').numpy()  # get padding mask
-            labelpos_masks = batch_poslabels.gt(-1).to('cpu').numpy()
+            seg_decode_mask = batch_seglabels.gt(-1)
+            pos_decode_mask = batch_poslabels.gt(-1)
+            labelseg_masks = seg_decode_mask.to('cpu').numpy()  # get padding mask
+            labelpos_masks = pos_decode_mask.to('cpu').numpy()
 
-            batch_segoutput = batch_segoutput.detach().cpu().numpy()
-            batch_posoutput = batch_posoutput.detach().cpu().numpy()
+            batch_segoutput = model_ref.crf_seg.decode(batch_segoutput, mask=seg_decode_mask)
+            batch_posoutput = model_ref.crf_pos.decode(batch_posoutput, mask=pos_decode_mask)
+
             batch_seglabels = batch_seglabels.to('cpu').numpy()
             batch_poslabels = batch_poslabels.to('cpu').numpy()
 
-            for i, indices in enumerate(np.argmax(batch_segoutput, axis=2)):
+            for i, indices in enumerate(batch_segoutput):
                 pred_tag = []
                 for j, idx in enumerate(indices):
                     if labelseg_masks[i][j]:
@@ -62,7 +66,7 @@ def evaluate(dev_loader, model, mode='eval'):
                 pred_segtags.append(pred_tag)
             true_segtags.extend([[id_seg2label.get(idx) for idx in indices if idx > -1] for indices in batch_seglabels])
 
-            for i, indices in enumerate(np.argmax(batch_posoutput, axis=2)):
+            for i, indices in enumerate(batch_posoutput):
                 pred_tag = []
                 for j, idx in enumerate(indices):
                     if labelpos_masks[i][j]:
@@ -90,7 +94,7 @@ def evaluate(dev_loader, model, mode='eval'):
     #     output2res()
     seg_metrics['loss'] = dev_losses / len(dev_loader)
 
-    f1_, p_, r_ = f1_score_pos(true_segtags, pred_segtags)
+    f1_, p_, r_ = f1_score_pos(true_postags, pred_postags)
     pos_metrics['f1'] = f1_
     pos_metrics['p'] = p_
     pos_metrics['r'] = r_

@@ -25,7 +25,7 @@ sep_label = 'S'  # 拆分句子的标签分隔符
 dev_split_size = 0.1
 
 # 是否加载训练好的Seg模型
-load_before = True
+load_before = False
 
 # 是否对整个BERT进行fine tuning
 full_fine_tuning = True
@@ -42,7 +42,10 @@ patience = 0.0002
 patience_num = 4
 
 gpu = '0'
-device = torch.device("cuda")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+resume_checkpoint = os.path.join(os.getcwd(), 'sikuRoberta_model_crf0.pth')
+save_checkpoint = os.path.join(os.getcwd(), 'sikuRoberta_model_crf0.pth')
 
 use_attention = False
 cat_num = 10

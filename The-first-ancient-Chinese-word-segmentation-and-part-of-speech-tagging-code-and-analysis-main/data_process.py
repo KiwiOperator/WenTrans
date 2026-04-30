@@ -1,6 +1,10 @@
 import math
 import config
-from helper import get_gram2id
+
+try:
+    from helper import get_gram2id
+except ImportError:
+    get_gram2id = None
 def getBMES(input_str):
     """
     将每个输入词转换为BMES标注
@@ -116,7 +120,15 @@ def load_data(data_dir):
 
     gram2id = []
     gram2count = []
-    # gram2id, gram2count = get_gram2id(word_list, config.ngram_type, config.ngram_length, config.ngram_threshold)
+    if config.use_attention:
+        if get_gram2id is None:
+            raise ImportError("helper.py with get_gram2id is required when use_attention=True")
+        gram2id, gram2count = get_gram2id(
+            word_list,
+            config.ngram_type,
+            config.ngram_length,
+            config.ngram_threshold,
+        )
     gram_list = []
     positions = []
     gram_maxlen = []

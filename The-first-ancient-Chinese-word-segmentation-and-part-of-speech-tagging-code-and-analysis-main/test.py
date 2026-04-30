@@ -1,5 +1,4 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="4"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import torch
 import config
@@ -39,11 +38,11 @@ torch.cuda.manual_seed(seed)
 torch.cuda.manual_seed_all(seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
-device = torch.device('cuda:0')
+device = config.device
 test_loader  = DataLoader(test_dataset, batch_size=config.batch_size,\
                           collate_fn=test_dataset.collate_fn,num_workers=0,pin_memory=True)
 model=BertSegPos(config,gram2id)
 model.to(device)
-model.load_state_dict(torch.load('sikuRoberta_model_crf0.pth', map_location="cuda:0"))
+model.load_state_dict(torch.load(config.save_checkpoint, map_location=device))
 seg_metrics, pos_metrics=evaluate(test_loader, model, 'test')
 print("test:\nseg_metrics: {}, \npos_metrics: {}".format(seg_metrics, pos_metrics))
