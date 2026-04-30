@@ -1,0 +1,35 @@
+# Stage 3 (optional): unfreeze full model at low LR.
+stage: 3
+
+finetune_root: Erya/dataset/finetune_aux
+monolingual_path: null
+tokenizer_path: Erya
+model_path: Erya
+
+batch_size: 16
+grad_accum: 4
+num_steps: 8000
+warmup_steps: 800
+valid_every: 1000
+save_every: 2000
+log_every: 50
+
+lr_adapter: 5.0e-5
+lr_encoder: 1.0e-5
+lr_decoder: 1.0e-5
+weight_decay: 0.01
+max_grad_norm: 1.0
+
+kl_weight: 0.02
+denoise_weight: 0.0
+denoise_ratio: 0.0
+label_smoothing: 0.1
+
+max_src_chars: 1022
+max_tgt_tokens: 1024
+
+output_dir: Erya/checkpoints/stage3
+seed: 42
+bf16: true
+grad_checkpointing: true
+num_workers: 2
