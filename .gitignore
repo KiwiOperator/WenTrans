@@ -3,6 +3,7 @@
 # =========================
 # folders
 ACDS-master
+WordSeg-main
 
 __pycache__/
 *.py[cod]
