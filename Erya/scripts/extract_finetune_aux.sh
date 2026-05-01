@@ -14,6 +14,9 @@ fi
 
 mkdir -p "${DST}"
 echo "Extracting ${SRC} -> ${DST} ..."
-tar -xzf "${SRC}" -C "${DST}"
+# --no-same-owner / --no-same-permissions: skip chown/chmod that fail on
+# RunPod volumes and other non-root-owned bind mounts. Files extract fine,
+# we just don't try to preserve metadata from the source machine.
+tar --no-same-owner --no-same-permissions -xzf "${SRC}" -C "${DST}"
 echo "Done. Top-level entries:"
 ls -la "${DST}"

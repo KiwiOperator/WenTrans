@@ -93,6 +93,12 @@ class TrainConfig:
     resume_adapter: Optional[str] = None
     dry_run: bool = False
     num_workers: int = 2
+    # "sdpa" (default), "eager" (slowest, most compatible), "flash_attention_2"
+    attn_implementation: Optional[str] = None
+    # If set, validation scores at most this many batches per pass instead of
+    # the full valid set. The same fixed random subset is reused at every
+    # validation pass so CE numbers are comparable across steps.
+    valid_max_batches: Optional[int] = None
 
 
 def load_yaml_config(path: Path) -> dict:
@@ -242,8 +248,18 @@ def make_loaders(cfg: TrainConfig, parallel_train, parallel_valid, mono, tokeniz
             drop_last=True,
         )
 
+    if cfg.valid_max_batches is not None and cfg.valid_max_batches > 0:
+        from torch.utils.data import Subset
+        rng = np.random.default_rng(cfg.seed + 7)
+        n_full = len(parallel_valid)
+        n_take = min(n_full, cfg.valid_max_batches * cfg.batch_size)
+        indices = sorted(rng.choice(n_full, size=n_take, replace=False).tolist())
+        valid_dataset = Subset(parallel_valid, indices)
+    else:
+        valid_dataset = parallel_valid
+
     valid_loader = DataLoader(
-        parallel_valid,
+        valid_dataset,
         batch_size=cfg.batch_size,
         shuffle=False,
         collate_fn=collator,
@@ -331,13 +347,27 @@ def main():
     log.info("config: %s", json.dumps(asdict(cfg), indent=2, default=str))
     log.info("device: %s", device)
 
+    # cuDNN's SDPA backend has had recurring "no valid execution plans" failures
+    # on H100/A100 with mismatched cuDNN wheels. Force SDPA to use the flash /
+    # memory-efficient / math backends instead — all stable on H100.
+    if torch.cuda.is_available():
+        try:
+            torch.backends.cuda.enable_cudnn_sdp(False)
+            log.info("disabled cuDNN SDPA backend (using flash/mem-efficient/math)")
+        except AttributeError:
+            pass
+
     tokenizer = BertTokenizer.from_pretrained(cfg.tokenizer_path)
     log.info("loaded tokenizer: vocab=%d cls=%d sep=%d pad=%d mask=%d",
              tokenizer.vocab_size, tokenizer.cls_token_id, tokenizer.sep_token_id,
              tokenizer.pad_token_id, tokenizer.mask_token_id)
 
     log.info("loading base model from %s ...", cfg.model_path)
-    base_model = AutoModelForSeq2SeqLM.from_pretrained(cfg.model_path, trust_remote_code=True)
+    load_kwargs = {"trust_remote_code": True}
+    if cfg.attn_implementation:
+        load_kwargs["attn_implementation"] = cfg.attn_implementation
+        log.info("forcing attn_implementation=%s", cfg.attn_implementation)
+    base_model = AutoModelForSeq2SeqLM.from_pretrained(cfg.model_path, **load_kwargs)
     if cfg.grad_checkpointing:
         try:
             base_model.gradient_checkpointing_enable()
@@ -382,6 +412,11 @@ def main():
         g["base_lr"] = g["lr"]
 
     train_loader, valid_loader = make_loaders(cfg, parallel_train, parallel_valid, mono, tokenizer)
+    if cfg.valid_max_batches is not None and cfg.valid_max_batches > 0:
+        log.info(
+            "valid_max_batches=%d -> capped valid pass at ~%d examples (full valid set has %d)",
+            cfg.valid_max_batches, cfg.valid_max_batches * cfg.batch_size, len(parallel_valid),
+        )
 
     # ---- identity sanity check (only meaningful before any training)
     sanity_iter = iter(valid_loader)

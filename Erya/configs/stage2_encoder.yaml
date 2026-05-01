@@ -11,7 +11,8 @@ batch_size: 16
 grad_accum: 2
 num_steps: 16000
 warmup_steps: 800
-valid_every: 1000
+valid_every: 4000
+valid_max_batches: 200
 save_every: 2000
 log_every: 50
 

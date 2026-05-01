@@ -47,10 +47,16 @@ fi
 if [[ "${SKIP_DEPS:-0}" != "1" ]]; then
     echo "[1/5] Installing Python dependencies ..."
     python -m pip install --upgrade --quiet pip
+    # transformers >= 4.45 refuses torch.load on .bin files unless torch >= 2.6
+    # (CVE-2025-32434). Bumping torch can leave torchvision out of sync, which
+    # breaks transformers' image_utils import; upgrade torchvision in lockstep.
     python -m pip install --upgrade --quiet \
+        "torch>=2.6" \
+        "torchvision" \
         "transformers>=4.30" \
-        "huggingface_hub[cli]>=0.20" \
+        "huggingface_hub[cli]>=0.30" \
         pytorch-crf \
+        safetensors \
         sacrebleu \
         pyyaml \
         numpy
@@ -60,16 +66,27 @@ else
 fi
 echo
 
+# Pick the HuggingFace CLI binary: newer hub renamed `huggingface-cli` -> `hf`.
+if command -v hf >/dev/null 2>&1; then
+    HF_CLI="hf"
+elif command -v huggingface-cli >/dev/null 2>&1; then
+    HF_CLI="huggingface-cli"
+else
+    HF_CLI=""
+fi
+
 # ---- 2. Erya weights ---------------------------------------------------------
 ERYA_WEIGHTS="${ERYA_DIR}/pytorch_model.bin"
 if [[ "${SKIP_DOWNLOAD:-0}" != "1" ]]; then
     if [[ -f "${ERYA_WEIGHTS}" ]]; then
         echo "[2/5] ${ERYA_WEIGHTS} already present ($(du -h "${ERYA_WEIGHTS}" | cut -f1)), skipping."
+    elif [[ -z "${HF_CLI}" ]]; then
+        echo "[2/5] ERROR: no huggingface CLI found (neither 'hf' nor 'huggingface-cli'); cannot download." >&2
+        echo "       Install with:  python -m pip install --upgrade 'huggingface_hub[cli]'" >&2
+        exit 1
     else
-        echo "[2/5] Downloading RUCAIBox/Erya -> ${ERYA_DIR} ..."
-        huggingface-cli download RUCAIBox/Erya \
-            --local-dir "${ERYA_DIR}" \
-            --local-dir-use-symlinks False
+        echo "[2/5] Downloading RUCAIBox/Erya -> ${ERYA_DIR} (using ${HF_CLI}) ..."
+        ${HF_CLI} download RUCAIBox/Erya --local-dir "${ERYA_DIR}"
         echo "    ok."
     fi
 else
@@ -85,15 +102,19 @@ if [[ "${SKIP_DOWNLOAD:-0}" != "1" ]]; then
     if [[ -f "${AUX_TGZ}" ]]; then
         echo "[3/5] ${AUX_TGZ} already present ($(du -h "${AUX_TGZ}" | cut -f1)), skipping."
     elif [[ -n "${HF_DATASET_REPO:-}" ]]; then
-        echo "[3/5] Downloading ${HF_DATASET_FILENAME} from HF dataset ${HF_DATASET_REPO} ..."
+        if [[ -z "${HF_CLI}" ]]; then
+            echo "[3/5] ERROR: no huggingface CLI found; cannot download dataset." >&2
+            exit 1
+        fi
+        echo "[3/5] Downloading ${HF_DATASET_FILENAME} from HF dataset ${HF_DATASET_REPO} (using ${HF_CLI}) ..."
         mkdir -p "${ERYA_DIR}/dataset"
         if [[ -n "${HF_TOKEN:-}" ]]; then
+            export HF_TOKEN
             export HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}"
         fi
-        huggingface-cli download "${HF_DATASET_REPO}" "${HF_DATASET_FILENAME}" \
+        ${HF_CLI} download "${HF_DATASET_REPO}" "${HF_DATASET_FILENAME}" \
             --repo-type=dataset \
-            --local-dir "${ERYA_DIR}/dataset" \
-            --local-dir-use-symlinks False
+            --local-dir "${ERYA_DIR}/dataset"
         echo "    ok."
     else
         cat <<MSG
@@ -170,30 +191,24 @@ cat <<NEXT
 
 Next steps:
 
-  # (recommended) run inside tmux so you can detach
+  # (recommended) run inside tmux so you can detach safely
   tmux new -s erya
-
   cd ${WORKDIR}
 
-  # Stage 1 — adapters only
-  python -m Erya.finetune.train \\
-    --config Erya/configs/stage1_adapters.yaml --stage 1 \\
-    --output_dir ${ERYA_DIR}/checkpoints/stage1 \\
-    2>&1 | tee ${WORKDIR}/logs_stage1.log
+  # All three stages, sequentially, fail-fast on error
+  bash Erya/scripts/run_all_stages.sh
 
-  # Stage 2 — adapters + encoder, resume from stage 1 best
-  python -m Erya.finetune.train \\
-    --config Erya/configs/stage2_encoder.yaml --stage 2 \\
-    --resume_adapter ${ERYA_DIR}/checkpoints/stage1/best/adapter.pt \\
-    --output_dir ${ERYA_DIR}/checkpoints/stage2 \\
-    2>&1 | tee ${WORKDIR}/logs_stage2.log
-
-  # Stage 3 — full model, low LR, resume from stage 2 best
-  python -m Erya.finetune.train \\
-    --config Erya/configs/stage3_full.yaml --stage 3 \\
-    --resume ${ERYA_DIR}/checkpoints/stage2/best/full.pt \\
-    --output_dir ${ERYA_DIR}/checkpoints/stage3 \\
-    2>&1 | tee ${WORKDIR}/logs_stage3.log
+  # Or pick a subset:  STAGES="1 2"   STAGES="3"   FORCE=1 STAGES="2 3"
+  #
+  # Per-stage equivalents (if you want to run them one at a time):
+  python -m Erya.finetune.train --config Erya/configs/stage1_adapters.yaml \\
+      --stage 1 --output_dir ${ERYA_DIR}/checkpoints/stage1
+  python -m Erya.finetune.train --config Erya/configs/stage2_encoder.yaml \\
+      --stage 2 --resume_adapter ${ERYA_DIR}/checkpoints/stage1/best/adapter.pt \\
+      --output_dir ${ERYA_DIR}/checkpoints/stage2
+  python -m Erya.finetune.train --config Erya/configs/stage3_full.yaml \\
+      --stage 3 --resume ${ERYA_DIR}/checkpoints/stage2/best/full.pt \\
+      --output_dir ${ERYA_DIR}/checkpoints/stage3
 
 Detach from tmux: Ctrl-b d   |   Reattach: tmux attach -t erya
 ============================================================

@@ -12,6 +12,7 @@ grad_accum: 1
 num_steps: 8000
 warmup_steps: 400
 valid_every: 500
+valid_max_batches: 200
 save_every: 1000
 log_every: 50
 
