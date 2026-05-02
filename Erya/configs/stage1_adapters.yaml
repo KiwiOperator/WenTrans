@@ -1,0 +1,37 @@
+# Stage 1: train soft tag embeddings + alpha gates + KL head only.
+# All Erya weights frozen. Translation CE + KL distillation.
+stage: 1
+
+finetune_root: Erya/dataset/finetune_aux
+monolingual_path: null
+tokenizer_path: Erya
+model_path: Erya
+
+batch_size: 16
+grad_accum: 1
+num_steps: 8000
+warmup_steps: 400
+valid_every: 500
+valid_max_batches: 200
+save_every: 1000
+log_every: 50
+
+lr_adapter: 5.0e-4
+lr_encoder: 0.0
+lr_decoder: 0.0
+weight_decay: 0.01
+max_grad_norm: 1.0
+
+kl_weight: 0.1
+denoise_weight: 0.0
+denoise_ratio: 0.0
+label_smoothing: 0.0
+
+max_src_chars: 1022
+max_tgt_tokens: 1024
+
+output_dir: Erya/checkpoints/stage1
+seed: 42
+bf16: true
+grad_checkpointing: false
+num_workers: 2

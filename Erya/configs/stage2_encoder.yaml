@@ -1,0 +1,37 @@
+# Stage 2: unfreeze encoder + adapters. Decoder frozen. Two LRs.
+# Translation CE + KL distillation + optional denoising on monolingual.
+stage: 2
+
+finetune_root: Erya/dataset/finetune_aux
+monolingual_path: Erya/dataset/monolingual
+tokenizer_path: Erya
+model_path: Erya
+
+batch_size: 16
+grad_accum: 2
+num_steps: 16000
+warmup_steps: 800
+valid_every: 4000
+valid_max_batches: 200
+save_every: 2000
+log_every: 50
+
+lr_adapter: 5.0e-4
+lr_encoder: 5.0e-5
+lr_decoder: 0.0
+weight_decay: 0.01
+max_grad_norm: 1.0
+
+kl_weight: 0.05
+denoise_weight: 1.0
+denoise_ratio: 0.2
+label_smoothing: 0.0
+
+max_src_chars: 1022
+max_tgt_tokens: 1024
+
+output_dir: Erya/checkpoints/stage2
+seed: 42
+bf16: true
+grad_checkpointing: true
+num_workers: 2
