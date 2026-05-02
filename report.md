@@ -214,9 +214,9 @@ The wall-clock disparity between stage 1 and the others is almost entirely valid
 
 ---
 
-## 5. Preliminary Results
+## 5. Results
 
-This section reports BLEU and chrF on the EvaHan `hans` test split. Full per-corpus ablations are pending (see § 5.5).
+We report BLEU, chrF, and an inference-time α=0 ablation on every available EvaHan test split.
 
 ### 5.1. Final-stage validation losses
 
@@ -228,27 +228,29 @@ This section reports BLEU and chrF on the EvaHan `hans` test split. Full per-cor
 
 The roughly 50 % CE drop between stage 1 and stage 2 is consistent with the diagnosis in § 5.4: stage 1 trains adapters only, but the (BART-loaded) decoder begins **randomly initialised**, so adapters alone cannot drive CE much below 3.5. Stage 2 unfreezes the encoder and effectively trains the decoder for the first time, producing a steep CE drop.
 
-### 5.2. Translation quality on the `hans` test split
+### 5.2. Per-corpus translation quality
 
-| Variant | BLEU | chrF |
-|---|---|---|
-| Stage 1 best | 0.04 | 1.71 |
-| Stage 2 best | 27.80 | 25.18 |
-| **Stage 3 best, adapter on (`α_seg=+0.41`, `α_pos=−0.78`)** | **28.48** | **25.73** |
-| Stage 3 best, adapter neutralised (`α=0`) | 22.99 | 21.43 |
+Each row reports the stage-3 model evaluated twice on the corpus's `test.src` / `test.tgt`: once with the trained adapter active, once with the gates patched to zero (`adapter.alpha_seg = adapter.alpha_pos = 0`) so the wrapper is identity to vanilla forward through the BART encoder. SikuRoBERTa tag distributions are read from the pre-computed `test.src.siku_aux.npz` files in both runs, so the only difference between the two columns is whether those distributions are gated into the encoder embeddings.
+
+| Corpus  | Source text                  | α = 0 BLEU | α = 0 chrF | trained-α BLEU | trained-α chrF | ΔBLEU  | ΔchrF  |
+| ------- | ---------------------------- | :--------: | :--------: | :------------: | :------------: | :----: | :----: |
+| `xint`  | *Xīn Táng Shū*               |   27.54    |   24.86    |   **35.31**    |   **31.22**    | **+7.77** | **+6.36** |
+| `mings` | Ming-dynasty texts           |   30.18    |   27.08    |   **36.69**    |   **32.51**    | +6.51  | +5.43  |
+| `shij`  | *Shǐjì*                      |   20.24    |   19.43    |     26.19      |     24.07      | +5.95  | +4.64  |
+| `xux`   | Xú Xiákè's travel diaries    |   27.14    |   24.63    |     33.03      |     29.29      | +5.89  | +4.66  |
+| `hans`  | *Hàn Shū*                    |   22.99    |   21.43    |     28.48      |     25.73      | +5.49  | +4.30  |
+| `taip`  | *Tàipíng Yùlǎn*              |   17.96    |   17.48    |     22.00      |     20.60      | +4.04  | +3.12  |
+| **mean** |                             | **24.34**  | **22.49**  |   **30.28**    |   **27.24**    | **+5.94** | **+4.75** |
 
 ### 5.3. Adapter contribution
 
-Comparing the trained-`α` row to the `α=0` row isolates the adapter's effect at inference:
+Across all six EvaHan test splits the soft tag adapter contributes a **mean +5.94 BLEU / +4.75 chrF** lift over the otherwise-identical gates-zeroed baseline — a **~+24 % relative BLEU improvement** averaged across corpora. Three observations:
 
-$$
-\Delta_{\mathrm{adapter}}^{\mathrm{BLEU}} = 28.48 - 22.99 = +5.49 \quad (+19\% \text{ relative})
-$$
-$$
-\Delta_{\mathrm{adapter}}^{\mathrm{chrF}} = 25.73 - 21.43 = +4.30 \quad (+17\% \text{ relative})
-$$
+1. **The adapter helps every sub-corpus.** Δ ranges from +4.04 BLEU on `taip` to +7.77 BLEU on `xint`; no corpus is hurt or unaffected. The hypothesis "Siku tags only fit *Zuǒ Zhuàn*-adjacent texts" is rejected — the encoder learned a tag-injection scheme that generalises out-of-domain.
+2. **Relative gain is remarkably uniform (~22–29 %)** despite a 12-BLEU spread in baseline difficulty (`taip` 18 → `mings` 30 at α=0). The adapter contribution appears largely orthogonal to corpus difficulty: it adds the same kind of signal everywhere, rather than disproportionately rescuing weak baselines or polishing strong ones.
+3. **`xint` (Xīn Táng Shū) gets the largest absolute lift (+7.77 BLEU).** Plausible explanation: dynastic-history texts are dense in proper nouns and titles whose word boundaries disambiguate name-spans the character-level decoder otherwise gets wrong — exactly where the BIES segmentation distribution carries decisive information. `taip`, the smallest corpus and the most lexically miscellaneous, gets the smallest lift (+4.04) but still benefits.
 
-Soft tag injection contributes **~+5.5 BLEU** on the `hans` split. The adapter is doing real work, not a no-op. The encoder evidently learns to depend on tag-conditioned input embeddings during stages 2 and 3; removing them at inference produces distribution-shifted hidden states that the decoder can no longer translate cleanly.
+The result is consistent across BLEU and chrF — the BLEU/chrF rank order of corpora is preserved between α=0 and trained-α columns, and ΔBLEU and ΔchrF correlate strongly across the six rows. We therefore conclude that **soft per-character POS and segmentation distributions, distilled from a SikuRoBERTa CRF tagger and injected into Erya's encoder via two trainable embedding tables and learned scalar gates, contribute a robust BLEU lift across all six EvaHan sub-corpora.**
 
 ### 5.4. Caveat: BART vs. CPT loading
 
@@ -263,15 +265,15 @@ This means our pipeline effectively trains a fresh BART decoder from scratch (8k
 
 The "zero-shot" row in the ablation table (BLEU 0.04) is **not** vanilla Erya — it's a BART model with a random decoder. Comparing against published Erya zero-shot numbers requires vendoring the CPT modeling code so the decoder weights actually load. That work is outstanding and tracked in § 6.
 
-### 5.5. Pending ablations
+### 5.5. Outstanding ablations
 
-The following per-corpus runs will replace this paragraph in the final report:
+The all-six-corpora trained-α and α=0 evaluations reported in § 5.2 / § 5.3 close the headline result, but several questions remain open:
 
-1. **All six test splits, stage 3 trained-α**: tells us how the adapter generalises across domains (`hans`, `mings`, `shij`, `taip`, `xint`, `xux`).
-2. **All six test splits, stage 3 α=0**: per-corpus magnitude of the adapter contribution. SikuRoBERTa was trained on the *Zuǒ Zhuàn*; we expect tags to fit some domains (`hans`, `shij`) better than others (`mings`, modern texts).
-3. **α scaled to {0.5×, 1.5×}**: tests whether the trained α value is the inference optimum.
-4. **Vanilla Erya baseline with proper CPT loading**: replaces the broken zero-shot row.
-5. **BERTScore P/R/F1** (`bert-base-chinese`) per corpus, for a learned-embedding metric that complements BLEU/chrF on Chinese.
+1. **Inference-time α scaling** (`{0.5×, 0.75×, 1.5×}`): tests whether the trained α value is the inference optimum or whether a small post-hoc scale further improves BLEU.
+2. **Vanilla Erya baseline with proper CPT loading** (§ 5.4 / § 6.1): replaces the broken random-decoder zero-shot row and tells us how much of the 30.28 mean BLEU comes from the encoder + adapter vs. how much would have been there with a properly-loaded CPT decoder.
+3. **Hard-label baseline**: replace soft `seg_probs` / `pos_probs` with one-hot `seg_decode_ids` / `pos_decode_ids` to quantify the value of the soft-distribution distillation specifically (vs. just label injection).
+4. **BERTScore P/R/F1** (`bert-base-chinese` and `hfl/chinese-roberta-wwm-ext`) per corpus, for a learned-embedding metric that complements BLEU/chrF on Chinese.
+5. **Stage-2-only model** evaluated under the same α=0 / trained-α split: tells us whether stage 3's full-model unfreeze is helping or destabilising.
 
 ---
 

@@ -18,15 +18,19 @@ ancient Chinese tokens
 
 ## Quick results
 
-Stage-3 model on the EvaHan-style `hans` test split (Han Shu modern translation):
+Stage-3 model on six EvaHan test splits, evaluated twice — once with the trained adapter active, once with the gates patched to zero so the wrapper is identity to plain encoder forward.
 
-| Variant                                      | BLEU  | chrF  |
-| -------------------------------------------- | ----- | ----- |
-| Stage 3 best, adapter on (`α_seg=+0.41`, `α_pos=−0.78`) | **28.48** | **25.73** |
-| Stage 3 best, adapter neutralised (α = 0)             | 22.99 | 21.43 |
-| **Δ from soft tag adapter**                  | **+5.49** | **+4.30** |
+| Corpus  | α = 0 BLEU | trained-α BLEU | ΔBLEU | ΔchrF |
+| ------- | :--------: | :------------: | :---: | :---: |
+| `xint`  |   27.54    |   **35.31**    | **+7.77** | +6.36 |
+| `mings` |   30.18    |   **36.69**    | +6.51 | +5.43 |
+| `shij`  |   20.24    |     26.19      | +5.95 | +4.64 |
+| `xux`   |   27.14    |     33.03      | +5.89 | +4.66 |
+| `hans`  |   22.99    |     28.48      | +5.49 | +4.30 |
+| `taip`  |   17.96    |     22.00      | +4.04 | +3.12 |
+| **mean** | **24.34**  |   **30.28**    | **+5.94** | **+4.75** |
 
-The adapter contributes ~+19 % relative BLEU. Ablations on the other six sub-corpora are pending.
+The adapter contributes a **mean +5.94 BLEU / +4.75 chrF** lift across all six sub-corpora — about **+24 % relative BLEU** — and helps every corpus (no negative or marginal deltas). Full breakdown and discussion in [report.md](report.md) § 5.
 
 ## Architecture
 
