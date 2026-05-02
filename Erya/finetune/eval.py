@@ -116,6 +116,10 @@ def main():
     parser.add_argument("--max_new_tokens", type=int, default=256)
     parser.add_argument("--num_beams", type=int, default=4)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--bertscore", action="store_true",
+                        help="Also compute BERTScore P/R/F1 (requires `bert_score` and a GPU).")
+    parser.add_argument("--bertscore_model", type=str, default="bert-base-chinese",
+                        help="HF model id used by BERTScore. Default bert-base-chinese.")
     args = parser.parse_args()
 
     log = utils.get_logger("erya_finetune.eval")
@@ -190,16 +194,42 @@ def main():
         log.info("wrote hypotheses -> %s", args.output)
 
     if refs is not None:
+        results: dict = {}
         try:
             import sacrebleu
+            bleu = sacrebleu.corpus_bleu(hypotheses, [refs], tokenize="zh")
+            chrf = sacrebleu.corpus_chrf(hypotheses, [refs])
+            log.info("BLEU = %.2f", bleu.score)
+            log.info("chrF = %.2f", chrf.score)
+            results["bleu"] = bleu.score
+            results["chrf"] = chrf.score
         except ImportError:
             log.warning("sacrebleu not installed; skipping BLEU/chrF")
-            return
-        bleu = sacrebleu.corpus_bleu(hypotheses, [refs], tokenize="zh")
-        chrf = sacrebleu.corpus_chrf(hypotheses, [refs])
-        log.info("BLEU = %.2f", bleu.score)
-        log.info("chrF = %.2f", chrf.score)
-        print(json.dumps({"bleu": bleu.score, "chrf": chrf.score}, indent=2))
+
+        if args.bertscore:
+            try:
+                from bert_score import score as bert_score_score
+                log.info("computing BERTScore with model=%s ...", args.bertscore_model)
+                P, R, F = bert_score_score(
+                    hypotheses, refs,
+                    model_type=args.bertscore_model,
+                    lang="zh",
+                    rescale_with_baseline=False,
+                    device=str(device),
+                    verbose=False,
+                )
+                bs_p = float(P.mean().item()) * 100
+                bs_r = float(R.mean().item()) * 100
+                bs_f = float(F.mean().item()) * 100
+                log.info("BERTScore P=%.2f  R=%.2f  F1=%.2f", bs_p, bs_r, bs_f)
+                results["bertscore_p"] = bs_p
+                results["bertscore_r"] = bs_r
+                results["bertscore_f1"] = bs_f
+            except ImportError:
+                log.warning("bert_score not installed; run `pip install bert_score` to enable")
+
+        if results:
+            print(json.dumps(results, indent=2))
 
 
 if __name__ == "__main__":
