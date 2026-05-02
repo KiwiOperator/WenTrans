@@ -96,6 +96,8 @@ checkpoints/
 runs/
 wandb/
 mlruns/
+output/
+logs/
 
 # =========================
 # Jupyter Notebooks
@@ -139,3 +141,10 @@ Icon
 *.swp
 *.swo
 *~
+
+daizhigev20-master/
+*.pdf
+cws.txt
+daizhigev20-master.zip
+pretrain/README.md
+report/report.md

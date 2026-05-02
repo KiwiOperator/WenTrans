@@ -1,0 +1,8 @@
+numpy<2
+torch==2.2.2
+transformers==4.41.2
+datasets==2.19.2
+accelerate==0.30.1
+tokenizers
+sentencepiece
+safetensors
