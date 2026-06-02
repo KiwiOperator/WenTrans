@@ -15,6 +15,8 @@ WenTrans is a two-stage Ancient → Modern Chinese translation pipeline that use
 
 The two halves were developed in parallel on separate branches and are intended to be combined: the next step is to drop the EvaHan-trained `SikuRoBERTa-CRF` checkpoint used by the translation pipeline and substitute Hanzhi's M₂ tagger.
 
+[Read the paper](src/paper.pdf)
+
 ---
 
 ## Pipeline overview
